@@ -1,11 +1,11 @@
-# GrabCut
+# GraphCut
 Matthew Hokinson, matthew@hokinson.com
 
-Implementation of [“GrabCut” — Interactive Foreground Extraction using Iterated Graph Cuts](http://research.microsoft.com/apps/pubs/default.aspx?id=67890) 
+Implementation of foreground object extraction method described in [Interactive Graph Cuts for Optimal Boundary & Region Segmentation of Objects in N-D Images](https://www.csd.uwo.ca/~yboykov/Papers/iccv01.pdf) 
 
 ## Description 
 
-GrabCut is a graph-cut based smart scissors implementation for foreground object extraction in an image. More description and demo to come.
+GraphCut is a minimum graph-cut based smart scissors implementation for foreground object extraction in an image. More description and demo to come.
 
 ## Demo
 
@@ -13,4 +13,4 @@ GrabCut is a graph-cut based smart scissors implementation for foreground object
 
 ## Usage 
 
-Last updated: 12/5/22
+Last updated: 12/6/22
