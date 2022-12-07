@@ -7,6 +7,8 @@
 
 import numpy as np
 
+from __future__ import annotations
+from collections.abc import Callable
 import enum
 
 
@@ -34,7 +36,7 @@ class ImageGraph:
         as the label (foreground or background) of the node
         """
 
-        def __init__(self, row, col, intensity=0, label=None):
+        def __init__(self, row: int, col: int, intensity=0, label=None):
             self.row = row
             self.col = col
             self.intensity = self.set_intensity(intensity)      # TODO: Do we need intensity in the node?
@@ -45,7 +47,12 @@ class ImageGraph:
             return f"(R: {self.row}, C: {self.col}) -> (I: {self.intensity}, L: {self.label})" 
 
         def __hash__(self) -> int:
-            return hash((self.row, self.col, self.intensity))     
+            return hash((self.row, self.col, self.intensity))   
+
+        def __eq__(self, o: object) -> bool:
+            if not isinstance(o, ImageGraph.Node):
+                return False
+            return self.row == o.row and self.col == o.col
         
         def set_intensity(self, intensity):
             """Clip intensity to [0,255] or [0,1.0] if input is int or float respectively
@@ -58,7 +65,7 @@ class ImageGraph:
             else:
                 self.intensity = max(0.0, min(intensity, 1.0)) # Clip to [0,1.0]
 
-    def __init__(self, image):
+    def __init__(self, image: np.ndarray):
         """Init function for imageGraph.
 
         Args:
@@ -72,13 +79,13 @@ class ImageGraph:
         self.N = self.height * self.width
 
         # Create source and sink nodes
-        self.source = self.Node(self.N, label=self.Label.FOREGROUND)
-        self.sink = self.Node(0, label=self.Label.BACKGROUND)
+        self.source = self.Node(-1, 0, label=self.Label.FOREGROUND)
+        self.sink = self.Node(0, -1, label=self.Label.BACKGROUND)
 
         # Graph is dictionary of nodes to (adjacent node, weight) tuples
         self.graph = {}  
 
-    def build_graph(self, weight_function):
+    def build_graph(self, weight_function: Callable[[np.ndarray, int, int, int, int], float]) -> None:
         def get_neighbors(row, col):
             """
             Returns a list of the 8-neighbors of a pixel
@@ -103,3 +110,52 @@ class ImageGraph:
                 for n_row, n_col in get_neighbors(row, col):
                     neighbor = self.Node(n_row, n_col, self.image[n_row, n_col])
                     self.graph[node].append((neighbor, weight_function(self.image, row, col, n_row, n_col)))
+
+    def add_source_sink(self, regional_weight_function: Callable[[ImageGraph.Node, bool], float]) -> None:
+        for node in self.graph:
+            source_weight = regional_weight_function(node, True) 
+            sink_weight = regional_weight_function(node, False)
+
+            self.graph[node].append((self.source, source_weight))
+            self.graph[self.source].append((node, source_weight))
+            self.graph[self.sink].append((node, sink_weight))
+            self.graph[node].append((self.sink, sink_weight))
+
+    #############################
+    # QOL Methods
+    #############################
+    def get_edges(self, node: ImageGraph.Node) -> list[(ImageGraph.Node, float)]:
+        """Get all of the edges for a given node
+
+        Args:
+            node (ImageGraph.Node): Node
+
+        Returns:
+            list[(ImageGraph.Node, Weight)]: Neighbors and weights of the node
+        """
+        return self.graph[node]
+    
+    def get_max_weight(self, node: ImageGraph.Node) -> float:
+        """Get the maximum weight of a node
+
+        Args:
+            node (ImageGraph.Node): Node
+
+        Returns:
+            Weight: Maximum weight of the node
+        """
+        return max(self.graph[node], key=lambda x: x[1])[1]
+
+    def set_weight(self, node: ImageGraph.Node, neighbor: ImageGraph.Node, weight: float) -> None:
+        """Set the weight of an edge
+
+        Args:
+            node (ImageGraph.Node): Node
+            neighbor (ImageGraph.Node): Neighbor of the node
+            weight (float): Weight of the edge
+        """
+        # Not horrible since we have edge numbers for a node is bounded to 9 
+        for idx, (n, w) in enumerate(self.graph[node]):
+            if n == neighbor:
+                self.graph[node][idx] = (n, weight)
+                break 
