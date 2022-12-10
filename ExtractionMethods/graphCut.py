@@ -112,8 +112,9 @@ class GraphCut:
 
             dSquare = (intensity1 - intensity2)**2
             distance = np.sqrt((p1.row - p2.row)**2 + (p1.col - p2.col)**2)
+            rawWeight = GraphCut.GAMMA * math.exp(-dSquare / (2 * GraphCut.SIGMA**2)) / distance
 
-            return GraphCut.GAMMA * math.exp(-dSquare / (2 * GraphCut.SIGMA**2)) / distance
+            return int(100 * rawWeight) # Cast to int, preserve 2 sig. decimal digits 
 
         def __get_regional_weight(boundaryWeightSums: dict[ImageGraph.Node, int],
                                   regionalPenalties: np.ndarray,
@@ -122,7 +123,8 @@ class GraphCut:
                                   image: np.ndarray) -> int:
             # Do general weighting if pixel is not seeded
             if pixel.label == None:
-                return GraphCut.LAMBDA * regionalPenalties[0 if isForeground else 1, image[pixel.row, pixel.col]]
+                regionalWeight = GraphCut.LAMBDA * regionalPenalties[0 if isForeground else 1, image[pixel.row, pixel.col]]
+                return int(100 * regionalWeight) # Cast to int, preserve 2 sig. decimal digits 
 
             # Weighting for seeded pixels
             # All (and only) seeded pixels should be in boundary_weight_sums, throw error if not
@@ -144,12 +146,11 @@ class GraphCut:
             foregroundSeeds=self.foregroundSeeds, backgroundSeeds=self.backgroundSeeds)
         self.imageGraph.build_graph(__get_boundary_weight)
 
-        regionalPenalties = self.__get_regional_penalties(
-            self.imageGraph.image, self.imageGraph.get_seeded_pixels())
+        regionalPenalties = self.__get_regional_penalties(self.imageGraph.image)
 
         # Find all current weight sums for each pixel given only the boundaries
         boundaryWeightSums = {node: sum(
-            edge[1] for edge in edges) for node, edges in self.imageGraph.get_seeded_pixels()}
+            neighbors.values()) for node, neighbors in self.imageGraph.get_seeded_graph()}
         self.imageGraph.add_weighted_source_sink(
             partial(__get_regional_weight, boundaryWeightSums, regionalPenalties))
 
@@ -167,7 +168,7 @@ class GraphCut:
             col (int): Col of the seed
         """
         self.foregroundSeeds.append((row, col))
-        self.imageGraph.addSeed(row, col, isForeground=True)
+        self.imageGraph.set_seed(row, col, isForeground=True) 
 
     def add_background_seed(self, row: int, col: int):
         """Add a background seed to the graph cut
@@ -177,4 +178,4 @@ class GraphCut:
             col (int): Col of the seed
         """
         self.backgroundSeeds.append((row, col))
-        self.imageGraph.addSeed(row, col, isForeground=False)
+        self.imageGraph.set_seed(row, col, isForeground=False)
