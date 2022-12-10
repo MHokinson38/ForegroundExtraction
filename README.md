@@ -17,6 +17,9 @@ GraphCut is a minimum graph-cut based smart scissors implementation for foregrou
 
 ## Dependencies 
 
+## Tests 
+You can run unit tests (located in `tests/`) by running the command `python3 -m pytest` in the root directory. 
+
 ## Coming in the future 
 Currently only implementing GraphCut, but with hopes to add various other Foreground Image extraction methods for comparison in the future. 
 
