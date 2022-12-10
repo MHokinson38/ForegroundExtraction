@@ -11,10 +11,12 @@ from __future__ import annotations
 from collections.abc import Callable
 import enum
 
-
 class ImageGraph:
     """
     Data structure for storing images as a weighted graph for use in graph cut algorithms
+
+    Meant to be used to store both the orinal image and the graph representation 
+        => Do not store the Image in the specific cut implementation class  
 
     Graph Representation:
         - Each pixel is a node in the graph
@@ -32,38 +34,29 @@ class ImageGraph:
         """
         A node in the graph representing a image pixel 
 
-        Relative location of the Nodes matter, so we store intensity and location, as well 
+        Relative location of the Nodes matter, so we store location, as well 
         as the label (foreground or background) of the node
         """
 
-        def __init__(self, row: int, col: int, intensity=0, label=None):
+        def __init__(self, row: int, col: int, label=None):
             self.row = row
             self.col = col
-            self.intensity = self.set_intensity(intensity)      # TODO: Do we need intensity in the node?
 
             self.label = label
 
         def __repr__(self) -> str:
-            return f"(R: {self.row}, C: {self.col}) -> (I: {self.intensity}, L: {self.label})" 
+            return f"(R: {self.row}, C: {self.col}) -> (Label: {self.label})" 
 
         def __hash__(self) -> int:
-            return hash((self.row, self.col, self.intensity))   
+            return hash((self.row, self.col))   
 
         def __eq__(self, o: object) -> bool:
             if not isinstance(o, ImageGraph.Node):
                 return False
             return self.row == o.row and self.col == o.col
-        
-        def set_intensity(self, intensity):
-            """Clip intensity to [0,255] or [0,1.0] if input is int or float respectively
 
-            Args:
-                intensity (Real Num): pixel intensity value 
-            """
-            if type(intensity) == int:
-                self.intensity = max(0, min(intensity, 255)) # Clip to [0,255]
-            else:
-                self.intensity = max(0.0, min(intensity, 1.0)) # Clip to [0,1.0]
+    # Type Aliases 
+    graph_t = dict[Node, list[tuple[Node, float]]]
 
     def __init__(self, image: np.ndarray):
         """Init function for imageGraph.
@@ -74,18 +67,19 @@ class ImageGraph:
                 - H: Height of the image
                 - 1: Number of channels in the image (1 for greyscale, 3 for RGB), only support greyscale for now
         """
-        self.image = image.copy()
+        self.image = image.copy()   
         self.height, self.width = image.shape[:2]
-        self.N = self.height * self.width
 
         # Create source and sink nodes
-        self.source = self.Node(-1, 0, label=self.Label.FOREGROUND)
-        self.sink = self.Node(0, -1, label=self.Label.BACKGROUND)
+        self.source = self.__get_or_create_node(-1, 0, label=self.Label.FOREGROUND)
+        self.sink = self.__get_or_create_node(0, -1, label=self.Label.BACKGROUND)
 
-        # Graph is dictionary of nodes to (adjacent node, weight) tuples
+        # Graph is dictionary of nodes to a list of (adjacent node, weight) tuples
         self.graph = {}  
+        self.__node_lookup = {}      # For mapping index to node, this is SSOT for nodes 
+        self.__seeded_pixels = set() # Set of seeded pixels
 
-    def build_graph(self, weight_function: Callable[[np.ndarray, int, int, int, int], float]) -> None:
+    def build_graph(self, weight_function: Callable[[np.ndarray, int, int, int, int], int]) -> None:
         def get_neighbors(row, col):
             """
             Returns a list of the 8-neighbors of a pixel
@@ -103,15 +97,13 @@ class ImageGraph:
         # Create vertice, add intensity, and then add all edges 
         for row in range(self.height):
             for col in range(self.width):
-                node = self.Node(row, col, self.image[row, col])
-                if node not in self.graph:
-                        self.graph[node] = []
+                node = self.__get_or_create_node(row, col)
 
                 for n_row, n_col in get_neighbors(row, col):
-                    neighbor = self.Node(n_row, n_col, self.image[n_row, n_col])
-                    self.graph[node].append((neighbor, weight_function(self.image, row, col, n_row, n_col)))
+                    neighbor = self.__get_or_create_node(n_row, n_col)
+                    self.graph[node].append((neighbor, weight_function(node, neighbor, self.image)))
 
-    def add_source_sink(self, regional_weight_function: Callable[[ImageGraph.Node, bool], float]) -> None:
+    def add_weighted_source_sink(self, regional_weight_function: Callable[[ImageGraph.Node, bool], int]) -> None:
         for node in self.graph:
             source_weight = regional_weight_function(node, True) 
             sink_weight = regional_weight_function(node, False)
@@ -121,8 +113,62 @@ class ImageGraph:
             self.graph[self.sink].append((node, sink_weight))
             self.graph[node].append((self.sink, sink_weight))
 
+    def set_seeds(self, foregroundSeeds: list[(int, int)], backgroundSeeds: list[(int, int)]) -> None:
+        for row, col in foregroundSeeds:
+            node = self.__get_or_create_node(row, col)
+            node.label = self.Label.FOREGROUND
+            self.__seeded_pixels.add(node)
+
+        for row, col in backgroundSeeds:
+            node = self.__get_or_create_node(row, col)
+            node.label = self.Label.BACKGROUND
+            self.__seeded_pixels.add(node)
+
+    def get_seeded_pixels(self) -> graph_t:
+        return {node: self.graph[node] for node in self.__seeded_pixels}
+
     #############################
-    # QOL Methods
+    # Private methods 
+    #############################
+    def __get_node(self, row: int, col: int) -> ImageGraph.Node:
+        if (row, col) not in self.__node_lookup:
+            self.__node_lookup[(row, col)] = self.Node(row, col)
+        return self.__node_lookup[(row, col)]
+
+    def __get_or_create_node(self, row: int, col: int, label=None) -> ImageGraph.Node:
+        if (row, col) not in self.__node_lookup:
+            self.__node_lookup[(row, col)] = self.Node(row, col)
+            self.graph[self.__node_lookup[(row, col)]] = []
+        return self.__node_lookup[(row, col)]
+
+    def __node_present(self, row: int, col: int) -> bool:
+        return (row, col) in self.__node_lookup
+
+    #############################
+    # Image Processing 
+    #############################
+    def get_foreground(self) -> np.ndarray:
+        foreground = np.zeros_like(self.image)
+        for row in range(self.height):
+            for col in range(self.width):
+                node = self.__get_node(row, col)
+                if node.label == self.Label.FOREGROUND:
+                    foreground[row, col] = self.image[row, col]
+
+        return foreground
+
+    def get_foreground_mask(self) -> np.ndarray:
+        mask = np.zeros_like(self.image)
+        for row in range(self.height):
+            for col in range(self.width):
+                node = self.__get_node(row, col)
+                if node.label == self.Label.FOREGROUND:
+                    mask[row, col] = 255
+
+        return mask
+
+    #############################
+    # QOL Methods (For random outside use)
     #############################
     def get_edges(self, node: ImageGraph.Node) -> list[(ImageGraph.Node, float)]:
         """Get all of the edges for a given node
@@ -133,6 +179,9 @@ class ImageGraph:
         Returns:
             list[(ImageGraph.Node, Weight)]: Neighbors and weights of the node
         """
+        if not self.__node_present(node.row, node.col):
+            raise ValueError("Node not in graph")
+
         return self.graph[node]
     
     def get_max_weight(self, node: ImageGraph.Node) -> float:
@@ -144,6 +193,9 @@ class ImageGraph:
         Returns:
             Weight: Maximum weight of the node
         """
+        if not self.__node_present(node.row, node.col):
+            raise ValueError("Node not in graph")
+
         return max(self.graph[node], key=lambda x: x[1])[1]
 
     def set_weight(self, node: ImageGraph.Node, neighbor: ImageGraph.Node, weight: float) -> None:
@@ -154,8 +206,11 @@ class ImageGraph:
             neighbor (ImageGraph.Node): Neighbor of the node
             weight (float): Weight of the edge
         """
+        if not self.__node_present(node.row, node.col) or not self.__node_present(neighbor.row, neighbor.col):
+            raise ValueError("Node or neighbor not in graph")
+
         # Not horrible since we have edge numbers for a node is bounded to 9 
-        for idx, (n, w) in enumerate(self.graph[node]):
+        for idx, (n, _) in enumerate(self.graph[node]):
             if n == neighbor:
                 self.graph[node][idx] = (n, weight)
                 break 
