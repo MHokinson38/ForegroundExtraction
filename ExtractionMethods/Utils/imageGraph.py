@@ -79,7 +79,7 @@ class ImageGraph:
         self.__node_lookup = {}      # For mapping index to node, this is SSOT for nodes 
         self.__seeded_pixels = set() # Set of seeded pixels
 
-    def build_graph(self, weight_function: Callable[[np.ndarray, int, int, int, int], int]) -> None:
+    def build_graph(self, weight_function: Callable[[ImageGraph.Node, ImageGraph.Node, np.ndarray], int]) -> None:
         def get_neighbors(row, col):
             """
             Returns a list of the 8-neighbors of a pixel
@@ -103,10 +103,10 @@ class ImageGraph:
                     neighbor = self.__get_or_create_node(n_row, n_col)
                     self.graph[node].append((neighbor, weight_function(node, neighbor, self.image)))
 
-    def add_weighted_source_sink(self, regional_weight_function: Callable[[ImageGraph.Node, bool], int]) -> None:
+    def add_weighted_source_sink(self, regional_weight_function: Callable[[ImageGraph.Node, bool, np.ndarray], int]) -> None:
         for node in self.graph:
-            source_weight = regional_weight_function(node, True) 
-            sink_weight = regional_weight_function(node, False)
+            source_weight = regional_weight_function(node, True, self.image) 
+            sink_weight = regional_weight_function(node, False, self.image)
 
             self.graph[node].append((self.source, source_weight))
             self.graph[self.source].append((node, source_weight))
