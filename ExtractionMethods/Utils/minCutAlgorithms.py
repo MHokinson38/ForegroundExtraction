@@ -1,3 +1,4 @@
+from __future__ import annotations
 #############################
 # Various Graph Cut Algorithms which operate on the ImageGraph 
 # representation of an image. Seeding of any sort is represented in the 
@@ -7,10 +8,9 @@
 # Matthew Hokinson, 12/7/22
 #############################
 
-from __future__ import annotations
 from collections import deque
 
-from imageGraph import ImageGraph 
+from .imageGraph import ImageGraph 
 
 def pushRelabelCut(imageGraph: ImageGraph) -> None:
     """
@@ -28,7 +28,7 @@ def pushRelabelCut(imageGraph: ImageGraph) -> None:
     # Need to track current height, excess, flow, and capacity of each node (capacity in graph) 
     heights = {node: 0 for node in imageGraph.get_vertices()}
     excess = {node: 0 for node in imageGraph.get_vertices()}
-    flow = {node: {neighbor: 0 for (neighbor, _) in imageGraph.get_edges(node)} for node in imageGraph.get_vertices()}
+    flow = {node: {neighbor: 0 for neighbor in imageGraph.get_edges(node).keys()} for node in imageGraph.get_vertices()}
     excessQueue = deque()
 
     def _push(node: ImageGraph.Node, neighbor: ImageGraph.Node) -> None:
@@ -53,7 +53,7 @@ def pushRelabelCut(imageGraph: ImageGraph) -> None:
         # Add neighbor to the queue if it has excess 
         # If the excess is the push amount, then we know it wasn't in the queue before
         if excess[neighbor] == pushAmount:
-            excessQueue.appendLeft(neighbor)
+            excessQueue.appendleft(neighbor)
     
     def _relabel(node: ImageGraph.Node) -> None:
         """
@@ -109,7 +109,8 @@ def pushRelabelCut(imageGraph: ImageGraph) -> None:
         _push(imageGraph.source, neighbor)
 
     while len(excessQueue) > 0:
-        node = excessQueue.pop(0)
+        print(f"Excess Queue Size: {len(excessQueue)}")
+        node = excessQueue.pop()
 
         if node == imageGraph.source or node == imageGraph.sink:
             continue
@@ -126,6 +127,6 @@ def pushRelabelCut(imageGraph: ImageGraph) -> None:
         # If there is still capacity from source to node, then it is foreground
         # We will have subtracted flow from source to node if we pushed back
         if flow[imageGraph.source][node] < imageGraph.get_edge_weight(node, imageGraph.source):
-            imageGraph.set_label(node, ImageGraph.Label.Foreground)
+            imageGraph.set_label(node, ImageGraph.Label.FOREGROUND)
         else:
-            imageGraph.set_label(node, ImageGraph.Label.Background)
+            imageGraph.set_label(node, ImageGraph.Label.BACKGROUND)

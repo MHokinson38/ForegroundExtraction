@@ -1,3 +1,4 @@
+from __future__ import annotations
 #############################
 # Data Structure for storing images as a weighted graph
 # for use in graph cut algorithms
@@ -7,7 +8,6 @@
 
 import numpy as np
 
-from __future__ import annotations
 from collections.abc import Callable
 import enum
 
@@ -71,14 +71,13 @@ class ImageGraph:
         self.height, self.width = image.shape[:2]
         self.N = self.height * self.width
 
+        self.source = None
+        self.sink = None
+
         # Graph is dictionary of nodes to a list of (adjacent node, weight) tuples
         self.__graph = {}  
         self.__node_lookup = {}      # For mapping index to nodes 
         self.__seeded_pixels = set() # Set of seeded pixels
-
-        # TODO: Matt - Redo the graph, it will be easier to keep a list of vertices and edges as two sets, 
-        #, that way we can query edges directly with (node, node2) as the key 
-        # Write wrapper functions, but use sets of the node pairs as the key (unordered) 
 
     def build_graph(self, weight_function: Callable[[ImageGraph.Node, ImageGraph.Node, np.ndarray], int]) -> None:
         def get_neighbors(row, col):
@@ -115,6 +114,10 @@ class ImageGraph:
         self.sink = self.__get_or_create_node(0, -1, label=self.Label.BACKGROUND)
 
         for node in self.__graph:
+            # Skip the source and sink (no self edges) 
+            if node == self.source or node == self.sink:
+                continue
+        
             source_weight = regional_weight_function(node, True, self.image) 
             sink_weight = regional_weight_function(node, False, self.image)
 
@@ -154,12 +157,12 @@ class ImageGraph:
 
     def __get_or_create_node(self, row: int, col: int, label=None) -> ImageGraph.Node:
         # Verify this is a valid pixel location 
-        if not self.__is_valid_pixel(row, col):
+        if not self.__is_valid_pixel(row, col) and label is None: # hacky label check 
             raise ValueError(f"Invalid pixel location ({row}, {col})")
 
         if (row, col) not in self.__node_lookup:
             self.__node_lookup[(row, col)] = self.Node(row, col)
-            self.__graph[self.__node_lookup[(row, col)]] = []
+            self.__graph[self.__node_lookup[(row, col)]] = {}
         return self.__node_lookup[(row, col)]
 
     def __node_present(self, n: ImageGraph.Node) -> bool:
@@ -231,7 +234,7 @@ class ImageGraph:
         Returns:
             list[(ImageGraph.Node, Weight)]: Neighbors and weights of the node
         """
-        if not self.__node_present(node.row, node.col):
+        if not self.__node_present(node):
             raise ValueError("Node not in graph")
 
         return self.__graph[node]
@@ -251,13 +254,27 @@ class ImageGraph:
 
         return self.__graph[node][neighbor]
 
-    def get_seeded_graph(self) -> graph_t:
+    def get_total_weight(self, node: ImageGraph.Node) -> int:
+        """Get the total weight of a node
+
+        Args:
+            node (ImageGraph.Node): Node
+
+        Returns:
+            int: Total weight of the node
+        """
+        if not self.__node_present(node):
+            raise ValueError("Node not in graph")
+
+        return sum(self.__graph[node].values())
+
+    def get_seeded_pixels(self) -> list[ImageGraph.Node]:
         """Get the seeded portions of the graph 
 
         Returns:
-            graph_t: Seeded pixels and their weights
+            list[ImageGraph.Node]: Seeded pixels
         """
-        return {node: self.__graph[node] for node in self.__seeded_pixels}
+        return list(self.__seeded_pixels)
 
     def get_neighbors(self, node: ImageGraph.Node) -> list[ImageGraph.Node]:
         """Get all of the neighbors of a node
@@ -268,10 +285,10 @@ class ImageGraph:
         Returns:
             list[ImageGraph.Node]: Neighbors of the node
         """
-        if not self.__node_present(node.row, node.col):
+        if not self.__node_present(node):
             raise ValueError("Node not in graph")
 
-        return self.__graph[node].keys() 
+        return list(self.__graph[node].keys())
     
     def get_max_weight(self, node: ImageGraph.Node) -> float:
         """Get the maximum weight of a node
@@ -282,7 +299,7 @@ class ImageGraph:
         Returns:
             Weight: Maximum weight of the node
         """
-        if not self.__node_present(node.row, node.col):
+        if not self.__node_present(node):
             raise ValueError("Node not in graph")
 
         return max(self.__graph[node].values())
