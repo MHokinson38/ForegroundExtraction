@@ -3,3 +3,8 @@ __pycache__/
 
 # ignore all .pytest_cache directories
 .pytest_cache/
+
+# ignore and image files in the main directory 
+/*.png
+/*.jpg
+/*.jpeg
