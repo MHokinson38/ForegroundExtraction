@@ -9,8 +9,52 @@ from __future__ import annotations
 #############################
 
 from collections import deque
+import maxflow  
 
 from .imageGraph import ImageGraph 
+
+def biggerBetterFasterStronger(imageGraph: ImageGraph) -> None:
+    """
+    Max Flow Graph Cut Algorithm
+
+    The results of the cut are stored in the given ImageGraph object. We run 
+    a max flow algorithm. The algorithm terminates when there are no remaining 
+    paths from the source to the sink.
+
+    Args:
+        imageGraph (ImageGraph): ImageGraph representation of the image
+    """
+    # Create a maxflow graph
+    graph = maxflow.Graph[int](imageGraph.N, 3 * imageGraph.N)
+    # Add the nodes
+    nodes = {node: graph.add_nodes(1) for node in imageGraph.get_vertices()}
+
+    # Add the edges
+    for node in imageGraph.get_vertices():
+        for neighbor in imageGraph.get_edges(node).keys():
+            # Add the edge
+            weight = imageGraph.get_edge_weight(node, neighbor)
+            graph.add_edge(nodes[node], nodes[neighbor], weight, weight)
+
+    # Add the source and sink edge
+    for node in imageGraph.get_vertices():
+        if node == imageGraph.source or node == imageGraph.sink:
+            continue
+            
+        # Add the edge
+        graph.add_tedge(nodes[node], imageGraph.get_edge_weight(node, imageGraph.source), 
+                        imageGraph.get_edge_weight(node, imageGraph.sink))
+
+    # Run the max flow algorithm
+    graph.maxflow()
+
+    # Label the nodes
+    for node in imageGraph.get_vertices():
+        # print(f"Node {node} has segment {graph.get_segment(nodes[node])}")
+        if graph.get_segment(nodes[node]) == 0:
+            imageGraph.set_label(node, ImageGraph.Label.FOREGROUND)
+        else:
+            imageGraph.set_label(node, ImageGraph.Label.BACKGROUND)
 
 def pushRelabelCut(imageGraph: ImageGraph) -> None:
     """
@@ -109,7 +153,7 @@ def pushRelabelCut(imageGraph: ImageGraph) -> None:
         _push(imageGraph.source, neighbor)
 
     while len(excessQueue) > 0:
-        print(f"Excess Queue Size: {len(excessQueue)}")
+        # print(len(excessQueue))
         node = excessQueue.pop()
 
         if node == imageGraph.source or node == imageGraph.sink:

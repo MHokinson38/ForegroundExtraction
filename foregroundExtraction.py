@@ -20,7 +20,7 @@ def debug(str):
     if DEBUG:
         print(str)
 
-SELECTION_RADIUS = 25
+SELECTION_RADIUS = 10
 
 def add_seeds(img, seeds, x, y):
     """
@@ -87,8 +87,7 @@ if __name__ == '__main__':
         # if the key is enter, then extract the foreground
         if key == 13:
             debug("Begining the foreground cut")
-            debug(f"Foreground seeds: {foregroundSeeds}")
-            debug(f"Background seeds: {backgroundSeeds}")
+
             # create the graph cut object 
             gc = GraphCut(img, foregroundSeeds, backgroundSeeds)
             foreground_img = gc.extract_foreground()

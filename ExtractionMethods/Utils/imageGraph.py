@@ -250,7 +250,7 @@ class ImageGraph:
             int: Weight of the edge
         """
         if not self.__edge_exists(node, neighbor):
-            raise ValueError("Edge not in graph")
+            raise ValueError(f"Edge not in graph, {node} -> {neighbor}")
 
         return self.__graph[node][neighbor]
 

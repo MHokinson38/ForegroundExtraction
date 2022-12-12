@@ -24,7 +24,7 @@ class GraphCut:
     Graph cut implementation for foreground extraction
     """
     LAMBDA = 1.0  # Weight for regional penalty (TODO: Tune this)
-    GAMMA = 1.0  # Weight for boundary penalty (TODO: Tune this)
+    GAMMA = 5.0  # Weight for boundary penalty (TODO: Tune this)
     SIGMA = 30   # Intensity Difference Threshhold, 30 suggested by blog post: https://julie-jiang.github.io/image-segmentation/
 
     def __init__(self, image: np.ndarray, foregroundSeeds: list[(int, int)], backgroundSeeds: list[(int, int)]):
@@ -104,8 +104,6 @@ class GraphCut:
             distance = np.sqrt((p1.row - p2.row)**2 + (p1.col - p2.col)**2)
             rawWeight = GraphCut.GAMMA * math.exp(-dSquare / (2 * GraphCut.SIGMA**2)) / distance
 
-            # print(f"Boundary weight for {p1} and {p2}: dsquare:{dSquare}, distance:{distance}, rawWeight:{rawWeight}")
-
             return int(100 * rawWeight) # Cast to int, preserve 2 sig. decimal digits 
 
         def __get_regional_weight(boundaryWeightSums: dict[ImageGraph.Node, int],
@@ -137,15 +135,15 @@ class GraphCut:
 
         self.imageGraph.set_seeds(
             foregroundSeeds=self.foregroundSeeds, backgroundSeeds=self.backgroundSeeds)
-        print(f"Seeded pixels: ", self.imageGraph.get_seeded_pixels())
+        # print(f"Seeded pixels: ", self.imageGraph.get_seeded_pixels())
         self.imageGraph.build_graph(__get_boundary_weight)
 
-        print("Built graph...")
+        # Count the edges in the graph 
+        edges = 0
+        for node in self.imageGraph.get_vertices():
+            edges += len(self.imageGraph.get_edges(node).keys())
 
-        # Print out boundary weights (look good) 
-        # for node in self.imageGraph.get_vertices():
-        #     for neighbor in self.imageGraph.get_edges(node):
-        #         print(f"Boundary weight for: ({node}) -> ({neighbor}) = {self.imageGraph.get_edge_weight(node, neighbor)}")
+        print(f"Built graph\n Nodes: {self.imageGraph.N}, Edges: {edges}")
 
         regionalPenalties = self.__get_regional_penalties(self.imageGraph.image)
 
@@ -157,16 +155,9 @@ class GraphCut:
 
         print("Added source and sink...")
 
-        # Print the weights for source and sink connections 
-        # for node in self.imageGraph.get_vertices():
-        #     if node == self.imageGraph.source or node == self.imageGraph.sink:
-        #         continue
-        #     print(f"Source weight for: ({node}) = {self.imageGraph.get_edge_weight(node, self.imageGraph.source)}")
-        #     print(f"Sink weight for: ({node}) = {self.imageGraph.get_edge_weight(node, self.imageGraph.sink)}")
-
         # Perform graph cut using some algorithm (can be swapped for other algos)
         # Does the cut, and updates the labels of the nodes in the graph
-        MinCutAlgorithms.pushRelabelCut(self.imageGraph)
+        MinCutAlgorithms.biggerBetterFasterStronger(self.imageGraph)
 
         return self.imageGraph.get_foreground()
 
