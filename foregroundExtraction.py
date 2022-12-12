@@ -86,11 +86,12 @@ if __name__ == '__main__':
 
         # if the key is enter, then extract the foreground
         if key == 13:
-            debug("Begining the foreground cut")
+            debug("Begining the foreground cut...")
 
             # create the graph cut object 
             gc = GraphCut(img, foregroundSeeds, backgroundSeeds)
             foreground_img = gc.extract_foreground()
+            debug("Foreground cut complete")
 
             # show the foreground image 
             cv2.imshow('Foreground', foreground_img)

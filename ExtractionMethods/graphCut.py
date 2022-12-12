@@ -25,7 +25,7 @@ class GraphCut:
     """
     LAMBDA = 1.0  # Weight for regional penalty (TODO: Tune this)
     GAMMA = 5.0  # Weight for boundary penalty (TODO: Tune this)
-    SIGMA = 30   # Intensity Difference Threshhold, 30 suggested by blog post: https://julie-jiang.github.io/image-segmentation/
+    SIGMA = 15   # Intensity Difference Threshhold, 30 suggested by blog post: https://julie-jiang.github.io/image-segmentation/
 
     def __init__(self, image: np.ndarray, foregroundSeeds: list[(int, int)], backgroundSeeds: list[(int, int)]):
         """Init Function 
@@ -101,9 +101,10 @@ class GraphCut:
             intensity2 = int(image[p2.row, p2.col]) # Cast to int to avoid overflow
 
             dSquare = (intensity1 - intensity2)**2
-            distance = np.sqrt((p1.row - p2.row)**2 + (p1.col - p2.col)**2)
+            distance = np.sqrt((p1.row - p2.row)**2 + (p1.col - p2.col)**2) # either 1 or sqrt(2) 
             rawWeight = GraphCut.GAMMA * math.exp(-dSquare / (2 * GraphCut.SIGMA**2)) / distance
 
+            # print(f"Boundary weight between {p1} and {p2} is {rawWeight}")
             return int(100 * rawWeight) # Cast to int, preserve 2 sig. decimal digits 
 
         def __get_regional_weight(boundaryWeightSums: dict[ImageGraph.Node, int],
@@ -157,7 +158,8 @@ class GraphCut:
 
         # Perform graph cut using some algorithm (can be swapped for other algos)
         # Does the cut, and updates the labels of the nodes in the graph
-        MinCutAlgorithms.biggerBetterFasterStronger(self.imageGraph)
+        MinCutAlgorithms.pushRelabelCut(self.imageGraph)
+        # MinCutAlgorithms.biggerBetterFasterStronger(self.imageGraph)
 
         return self.imageGraph.get_foreground()
 

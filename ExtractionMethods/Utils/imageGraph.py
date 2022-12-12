@@ -71,6 +71,8 @@ class ImageGraph:
         self.height, self.width = image.shape[:2]
         self.N = self.height * self.width
 
+        self.use8Neighbors = True
+
         self.source = None
         self.sink = None
 
@@ -84,13 +86,14 @@ class ImageGraph:
             """
             Returns a list of the 8-neighbors of a pixel
             """
+            # 8-neighbor offsets of the pixel
+            offsets8 = [(-1,0), (0,-1), (0,1), (1,0), (-1,-1), (-1,1), (1,-1), (1,1)]
+            offsets4 = [(-1,0), (0,-1), (0,1), (1,0)]
             neighbors = []
-            for i in range(-1, 2):
-                for j in range(-1, 2):
-                    if i == 0 and j == 0:
-                        continue
-                    if 0 <= row + i < self.height and 0 <= col + j < self.width:
-                        neighbors.append((row + i, col + j))
+            for offset in offsets8 if self.use8Neighbors else offsets4:
+                n_row, n_col = row + offset[0], col + offset[1]
+                if 0 <= n_row < self.height and 0 <= n_col < self.width:
+                    neighbors.append((n_row, n_col))
             return neighbors
         
         # Run through all pixels in the image 
