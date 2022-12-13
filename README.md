@@ -19,7 +19,7 @@ To come later.
 
 To run the code, ensure all dependencies (listed below) are included, then open up the folder and run `foregroundExtraction.py`. This can (and should) be run with at least one argument, the image to cut (example images are included in the `ExampleImages` directory), like so `python foregroundExtraction.py <image>`. Additional arguments can be found with `python foregroundExtraction.py -h`. 
 
-For setting the seeds, hover over the image and left click (for foreground seeds), or right click for background seeds). You can run the extraction with 'Enter', and quit by pressing 'q'. 
+For setting the seeds, hover over the image and left click for foreground seeds, or right click for background seeds. You can run the extraction with 'Enter', and quit by pressing 'q'. 
 
 ## Dependencies 
 - `numpy version=1.23.5` 
