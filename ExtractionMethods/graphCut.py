@@ -84,8 +84,6 @@ class GraphCut:
             regionalPenalties[0, i] = -math.log(prIntensityForeground)
             regionalPenalties[1, i] = -math.log(prIntensityBackground)
 
-        # print(regionalPenalties)
-
         return regionalPenalties
 
     def extract_foreground(self) -> np.ndarray:
@@ -136,15 +134,9 @@ class GraphCut:
 
         self.imageGraph.set_seeds(
             foregroundSeeds=self.foregroundSeeds, backgroundSeeds=self.backgroundSeeds)
-        # print(f"Seeded pixels: ", self.imageGraph.get_seeded_pixels())
         self.imageGraph.build_graph(__get_boundary_weight)
 
-        # Count the edges in the graph 
-        edges = 0
-        for node in self.imageGraph.get_vertices():
-            edges += len(self.imageGraph.get_edges(node).keys())
-
-        print(f"Built graph\n Nodes: {self.imageGraph.N}, Edges: {edges}")
+        print(f"Built graph\n Nodes: {self.imageGraph.N}")
 
         regionalPenalties = self.__get_regional_penalties(self.imageGraph.image)
 
@@ -158,8 +150,8 @@ class GraphCut:
 
         # Perform graph cut using some algorithm (can be swapped for other algos)
         # Does the cut, and updates the labels of the nodes in the graph
-        MinCutAlgorithms.pushRelabelCut(self.imageGraph)
-        # MinCutAlgorithms.biggerBetterFasterStronger(self.imageGraph)
+        # MinCutAlgorithms.pushRelabelCut(self.imageGraph)
+        MinCutAlgorithms.biggerBetterFasterStronger(self.imageGraph)
 
         return self.imageGraph.get_foreground()
 

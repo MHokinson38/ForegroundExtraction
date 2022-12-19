@@ -9,7 +9,9 @@ from __future__ import annotations
 #############################
 
 from collections import deque
+from typing import Tuple
 import maxflow  
+import math 
 
 from .imageGraph import ImageGraph 
 
@@ -74,6 +76,8 @@ def pushRelabelCut(imageGraph: ImageGraph) -> None:
     excess = {node: 0 for node in imageGraph.get_vertices()}
     flow = {node: {neighbor: 0 for neighbor in imageGraph.get_edges(node).keys()} for node in imageGraph.get_vertices()}
     excessQueue = deque()
+
+    iterations = 0
 
     def _push(node: ImageGraph.Node, neighbor: ImageGraph.Node) -> None:
         """
@@ -153,7 +157,9 @@ def pushRelabelCut(imageGraph: ImageGraph) -> None:
         _push(imageGraph.source, neighbor)
 
     while len(excessQueue) > 0:
-        # print(len(excessQueue))
+        iterations += 1
+        if iterations % 100000 == 0:
+            print(f"Iterations: {iterations/ 100000} x 10^5")
         node = excessQueue.pop()
 
         if node == imageGraph.source or node == imageGraph.sink:
@@ -174,3 +180,174 @@ def pushRelabelCut(imageGraph: ImageGraph) -> None:
             imageGraph.set_label(node, ImageGraph.Label.FOREGROUND)
         else:
             imageGraph.set_label(node, ImageGraph.Label.BACKGROUND)
+
+def boykov_kolmogorov(imageGraph: ImageGraph) -> None: 
+    """
+    Boykov-Kolmogorov Graph Cut Algorithm
+
+    Steps: 
+        1. Construct two search trees, S and T, originating from the source and sink, respectively 
+        2. Grow each tree through the graph on all edges that are not saturated
+            2.1 Growth stage ends an active node (leaf) reaches another active node (leaf) in the other tree
+        3. Augment phase 
+            3.1 Augment path found in the growth stage (two trees, move up to parents until S and T are met)
+            3.2 We want to fully saturate the path, with the min capacity of the whole path 
+            3.3 This changes the capacities and removes the saturated edges from the tree, which can result 
+                in orphans of existing nodes 
+        4. Adoption phase 
+            4.1 Want to find a new parent for orphan o in the same tree as o, if there is none then we 
+                make o a free node 
+            4.2 If o becomes free, we declare all o's children as orphans and repeat, until no orphans remain.
+        5. Repeat steps 2-4 until no more augmenting paths can be found (i.e. no more active nodes) 
+    """
+    # State constants (Maybe) 
+    FREE = 0
+    S_TREE = 1
+    T_TREE = 2
+
+    # Initialize the search trees, active nodes, and orphans 
+    S = set(imageGraph.source) # All nodes in S
+    T = set(imageGraph.sink) # All nodes in T (for both, structure is stored in parents) 
+    activeNodes = set([imageGraph.source, imageGraph.sink]) # Active nodes are leaves of the trees
+    orphans = set() # Orphans are nodes that have been removed from the tree, but have children
+
+    # Store the parents, but also the augmenting path from node to the terminal node ?
+    parents = {imageGraph.source: None, imageGraph.sink: None} # Parents of nodes in the tree
+    
+    flow = {node: {neighbor: 0 for neighbor in imageGraph.get_neighbors(node)} for node in imageGraph.get_vertices()} # Flow in the graph
+
+    def _grow() -> list[ImageGraph.Node]:
+        """
+        Grow the search trees from the active nodes. 
+
+        Returns:
+            list[ImageGraph.Node]: Augmenting path found during growth, if any
+        """
+        while (len(activeNodes) > 0):
+            # Get the next active node 
+            node = activeNodes.pop()
+
+            # Get the neighbors of the node that are not saturated
+            neighbors = [neighbor for neighbor in imageGraph.get_neighbors(node) 
+                if flow[node][neighbor] < imageGraph.get_edge_weight(node, neighbor)]
+
+            # Add the neighbors to the tree and mark them as active 
+            for neighbor in neighbors:
+                # If the neighbor is already in the tree, then we have a cycle 
+                if neighbor not in S and neighbor not in T:
+                    # Return the augmenting path 
+                    parents[neighbor] = node
+                    if node in S:
+                        S.add(neighbor)
+                    else:
+                        T.add(neighbor)
+                else:
+                    # Neighbor is in a tree, so we return the augmenting path P, also return P to the active node list 
+                    activeNodes.add(node)
+                    return _augmenting_path(node, neighbor)
+
+        return None
+
+    def _augmenting_path(node1: ImageGraph.Node, node2: ImageGraph.Node) -> Tuple(list[ImageGraph.Node], int):
+        """
+        Find the augmenting path between two nodes in the same tree
+
+        Args:
+            node1 (ImageGraph.Node): First node
+            node2 (ImageGraph.Node): Second node
+
+        Returns:
+            list[ImageGraph.Node]: Augmenting path between the two nodes
+        """
+        def _find_path_to_root(node: ImageGraph.Node) -> Tuple(list[ImageGraph.Node], int):
+            """
+            Find the path from a node to the root of the tree
+
+            Args:
+                node (ImageGraph.Node): Node to find path from
+
+            Returns:
+                list[ImageGraph.Node]: Path from node to root
+            """
+            path = []
+            min_weight = math.inf
+            while node is not None:
+                path.append(node)
+                min_weight = min(min_weight, imageGraph.get_edge_weight(parents[node], node))
+                node = parents[node]
+            return path, min_weight
+
+        path1, min_weight1 = _find_path_to_root(node1)
+        path2, min_weight2 = _find_path_to_root(node2)
+
+        min_weight = min(min_weight1, min_weight2, imageGraph.get_edge_weight(node1, node2))
+ 
+        if node1 in S:
+            return path1[::-1] + path2, min_weight
+        else:
+            return path2[::-1] + path1, min_weight
+
+    def _augment(path: list[ImageGraph.Node], min_weight: int) -> None:
+        """
+        Augment the path by the min_weight
+
+        Args:
+            path (list[ImageGraph.Node]): Path to augment
+            min_weight (int): Amount to augment by
+        """
+        for i in range(len(path) - 1):
+            flow[path[i]][path[i + 1]] += min_weight
+            flow[path[i + 1]][path[i]] -= min_weight
+
+            # check if the edge is saturated
+            if flow[path[i]][path[i + 1]] == imageGraph.get_edge_weight(path[i], path[i + 1]):
+                # if both nodes in S, then remove edge from S and make the second an orphan 
+                if path[i] in S and path[i + 1] in S:
+                    parents[path[i + 1]] = None
+                    orphans.add(path[i + 1])
+                elif path[i] in T and path[i + 1] in T:
+                    parents[path[i]] = None
+                    orphans.add(path[i])
+
+    def _adopt() -> None:
+        """
+        Adopt orphans into the tree
+        """
+        while len(orphans) > 0:
+            orphan = orphans.pop()
+
+            # Get neighbors with remaining capacity 
+            neighbors = [neighbor for neighbor in imageGraph.get_neighbors(orphan) 
+                if flow[orphan][neighbor] < imageGraph.get_edge_weight(orphan, neighbor)]
+
+            # Find a parent which belongs to a tree and has remaining capacity 
+            for neighbor in neighbors:
+                if neighbor in S or neighbor in T: # TODO: Need to verify that neighbor is connected back to the source/sink 
+                    # Adopt the orphan 
+                    parents[orphan] = neighbor
+                    break
+
+            # If we couldn't find a parent, then the orphan becomes an active node again 
+            if parents[orphan] is None:
+                activeNodes.appendleft(orphan)
+
+                # Mark other neighbors from the same tree as orphans if need be 
+                for neighbor in neighbors:
+                    if orphan in S and neighbor in S: 
+                        activeNodes.appendleft(neighbor)
+                    elif orphan in T and neighbor in T:
+                        activeNodes.appendleft(neighbor)
+                    
+                    if parents[neighbor] == orphan:
+                        parents[neighbor] = None
+                        orphans.add(neighbor)
+
+                # remove orphan from the tree and the active node set, P is now a free node again 
+                if orphan in S:
+                    S.remove(orphan)
+                elif orphan in T:
+                    T.remove(orphan)
+                if orphan in activeNodes:
+                    activeNodes.remove(orphan)
+    # Not entirely finished 
+    raise NotImplementedError
