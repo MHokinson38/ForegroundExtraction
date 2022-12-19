@@ -235,8 +235,13 @@ class ImageGraph:
      #############################
     # Query Methods (For QOL)
     #############################
-    def get_vertices(self) -> None:
-        raise NotImplementedError("Deprecated in new graph structure")
+    def get_vertices(self) -> list[ImageGraph.Node]:
+        """Get all of the vertices in the graph
+
+        Returns:
+            list[ImageGraph.Node]: All of the vertices in the graph
+        """
+        return list(self.__node_lookup.values())
 
     def get_neighbors(self, row: int, col: int) -> int:
         """Get all of the edges for a given node
